@@ -17,6 +17,7 @@ kitterly (rpi-rfm69) port of etrombly.
   
 5. RPi-rfm69 needed a short delay before sending ack so that sparkfun RP2040 pro micro would see the ack. You may need a longer delay if running a different micro, or. Not well tested (eg, I tested without encryption)
   
-Thanks to both etrombly and Kitterly for the starting points. I'm not an open-source guru, apologies to anyone if I've violated any protocols about using their code, let me know and I'll fix.
+6. This library uses interrputs, need to define reset, cs, and interrupt pins on both sides
+7. Thanks to both etrombly and Kitterly for the starting points. I'm not an open-source guru, apologies to anyone if I've violated any protocols about using their code, let me know and I'll fix.
   
  
