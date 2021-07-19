@@ -195,7 +195,7 @@ class Radio(object):
         
         """
 
-        attempts = kwargs.get('attempts', 3)
+        attempts = kwargs.get('attempts', 1)
         wait_time = kwargs.get('wait', 50)
         require_ack = kwargs.get('require_ack', True)
         if attempts > 1:
@@ -203,7 +203,6 @@ class Radio(object):
 
         for _ in range(0, attempts):
             self._send(toAddress, buff, attempts>0 )
-
             if not require_ack:
                 return None
 
@@ -214,7 +213,7 @@ class Radio(object):
                     return True
                 self._debug("Waiting for ack")
                 time.sleep(.05)
-
+            self._debug("no ack")
         return False
 
     def read_temperature(self, calFactor=0):
@@ -258,7 +257,7 @@ class Radio(object):
     def begin_receive(self):
         """Begin listening for packets"""
         while self.intLock:
-            time.sleep(.1)
+            time.sleep(.01)
 
         if (self._readReg(REG_IRQFLAGS2) & RF_IRQFLAGS2_PAYLOADREADY):
             # avoid RX deadlocks
@@ -285,16 +284,16 @@ class Radio(object):
         # Create packet
         packets = list(self.packets)
         self.packets = []
-        self._debug(packets)
+        #self._debug(packets)
         return packets
 
    
-    def send_ack(self, toAddress, buff = " "):
+    def send_ack(self, toAddress, buff = ""):
         """Send an acknowledgemet packet
         Args: 
             toAddress (int): Recipient node's ID
         """
-        time.sleep(.01)   # needed for RP2040 to get ready to receive ack
+        time.sleep(.02)   # needed for RP2040 to get ready to receive ack
         while not self._canSend():
             self.has_received_packet()
         self._sendFrame(toAddress, buff, False, True)
@@ -482,9 +481,10 @@ class Radio(object):
         #   self._readReg(REG_IRQFLAGS1),
         #   self._readReg(REG_IRQFLAGS2),  RF_IRQFLAGS2_PAYLOADREADY,
         #   self._readReg(REG_IRQFLAGS2) & RF_IRQFLAGS2_PAYLOADREADY)
-        self._debug("i")
+        irqflags2 = self._readReg(REG_IRQFLAGS2)
+        self._debug(f'i {irqflags2:02x}')
 
-        if self.mode == RF69_MODE_RX and self._readReg(REG_IRQFLAGS2) & RF_IRQFLAGS2_PAYLOADREADY:
+        if self.mode == RF69_MODE_RX and (irqflags2 & RF_IRQFLAGS2_PAYLOADREADY):
             self._setMode(RF69_MODE_STANDBY)
         
             payload_length, target_id, sender_id, CTLbyte = self.spi.xfer2([REG_FIFO & 0x7f,0,0,0,0])[1:]
@@ -517,7 +517,7 @@ class Radio(object):
 
             # Send acknowledgement if needed
             if ack_requested and self.auto_acknowledge:
-                self._debug('sending ack')
+                self._debug('sending ack '+str(sender_id))
                 self.intLock = False
                 self.send_ack(sender_id)
              

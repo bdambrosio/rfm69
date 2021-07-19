@@ -5,6 +5,7 @@ import datetime
 import time
 import RPi.GPIO as GPIO
 from icecream import ic
+import gc
 
 network_id = 61
 node_id = 1
@@ -12,20 +13,15 @@ is_rfm_69HW = True
 
 try:
     with Radio(FREQ_915MHZ, node_id, network_id, spiBus=1, resetPin=36, interruptPin=29,
-               isHighPower=True, verbose=True) as radio:
+               isHighPower=True, verbose=False) as radio:
         radio.set_power_level(50)
         while True:
-            time.sleep(.05)
-            waiting_echo = 0
             radio.begin_receive()
-            while waiting_echo < 4:
-                if radio.has_received_packet():
-                    ic(radio.get_packets(), waiting_echo)
-                    continue
-                else:
-                    waiting_echo += 1
-                    time.sleep(.05)
-
+            while (not radio.has_received_packet()):
+                    time.sleep(.05) # nothing to do, sleep
+            packet = radio.get_packets()[0]
+            ic(packet.sender, packet.data_string)
+            gc.collect()
 
 except OSError as e:
     print("shutting down", e)

@@ -28,7 +28,7 @@ try:
             time.sleep(.5)
             send_cnt += 1
             logger.debug("sending "+str(send_cnt))
-            if not radio.send(2, str(send_cnt), attempts=1, waitTime=100):
+            if not radio.send(2, str(send_cnt), True):
                 logger.debug("   no ack from send")
             #logger.debug("waiting for echo")
             echo_wait = 0
