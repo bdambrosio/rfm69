@@ -5,8 +5,9 @@
 from bme680 import *
 from machine import I2C, Pin
 from radios import rfm69
-import time
+import utime as time
 import ujson as json
+import gc
 
 NODEID		= 2    #unique for each node on same network
 PARTNERID       = 1
@@ -28,39 +29,54 @@ time.sleep(1)
     
 def main():
 	msg_id=0
-        radio = rfm69.RFM69(isRFM69HW=IS_RFM69HW, cs=2, irq=3)
-	radio.initialize(FREQUENCY,NODEID,NETWORKID)
-	print ("Operating at {} Mhz...".format(915))
-	
+        radio = rfm69.RFM69(isRFM69HW=True, csPin=3, intPin=2, rstPin=5)
+        radio.initialize(FREQUENCY,NODEID,NETWORKID)
+        print ("Operating at {} Mhz...".format(915))
+
         time.sleep(1)
         payload = [{},{},{},{}]
 	while True:
             payload[0]['msg_id'] = msg_id
-            payload[0]['temp'] = bme.temperature
+            payload[0]['tmp'] = bme.temperature
             msg_id+=1
 
             payload[1]['msg_id'] = msg_id
-            payload[1]['humidity'] = bme.humidity
+            payload[1]['hum'] = bme.humidity
             msg_id+=1
 
             payload[2]['msg_id'] = msg_id
-            payload[2]['atmpress'] = bme.pressure
+            payload[2]['atmp'] = bme.pressure
             msg_id+=1
 
             payload[3]['msg_id'] = msg_id
-            payload[3]['volatiles']  = bme.gas
+            payload[3]['vols']  = bme.gas
             msg_id+=1
 
             for i in range(0,4):
                 data = json.dumps(payload[i])
-	        s = "Sending[{}]: {} ".format(len(data), data)
-	        radio.sendWithRetry(PARTNERID, data, len(data), retries=RETRIES, retryWaitTime=ACK_TIME)
+                print("")
+	        print("Sending: {} ".format( data))
+	        ack = False
+                radio.send(PARTNERID, data, len(data), True)
                 if radio.ACKReceived(PARTNERID):
-		    s += "ok!"
+		    ack=True
 	        else:
-		    s += "nothing..."
-	        print (s)
-            time.sleep(5)
+                    for i in range(50):
+                        if radio.ACKReceived(PARTNERID):
+                            ack = True
+                            break
+                        else:
+                            time.sleep(.01)
+                print("  ack: ", ack)
+                time.sleep(.2) #between packets of a measurement
 
-            
+            time.sleep(2) # between measurements
+            gc.collect()
+
+print("init")
+s=time.ticks_ms()
+print("hi")
+print("bye")
+t = time.ticks_ms()
+print("time: ", t-s)
 main()

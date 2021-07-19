@@ -69,7 +69,7 @@ class RFM69(BaseRadio):
     ACK_RECEIVED = False
     RSSI = 0
     _mode = 0
-    _interruptPin = 2
+    _intPin = 2
     _csPin = 3
     _address = 0
     _promiscuousMode = False
@@ -80,11 +80,13 @@ class RFM69(BaseRadio):
 	self._isRFM69HW = isRFM69HW
         
 	self.spi = SPI(0)
-	self._interruptPin = Pin(intPin, Pin.IN)
+	self._intPin = Pin(intPin, Pin.IN)
 	self._csPin = Pin(csPin, Pin.OUT)
         self._rstPin = Pin(rstPin, Pin.OUT)
         self.start_time = time.time()
-        
+        self.interruptSeen = False # used to make sure we send end_of_transmit interrupt
+        self._intPin.irq(trigger=Pin.IRQ_RISING, handler=self._interruptHandler)
+
     # Convention I want to stick to is a single underscore to indicate "private" methods.
     # I'm grouping all the private stuff up at the beginning.
 
@@ -137,7 +139,8 @@ class RFM69(BaseRadio):
 
     def _canSend(self):
 	#if signal stronger than -100dBm is detected assume channel activity
-	if (self._mode == RF69_MODE_RX and self.PAYLOADLEN == 0 and self.readRSSI() < CSMA_LIMIT): 
+	#DNU - will ALWAYS return true on second call, no?
+        if (self._mode == RF69_MODE_RX and self.PAYLOADLEN == 0 and self.readRSSI() < CSMA_LIMIT): 
 	    self._setMode(RF69_MODE_STANDBY)
 	    return True
 	return False
@@ -167,16 +170,25 @@ class RFM69(BaseRadio):
 	self._unselect()
 
 	# no need to wait for transmit mode to be ready since its handled by the radio
+        self.interruptSeen = False
 	self._setMode(RF69_MODE_TX)
 	txStart = self._millis()
 	# wait for DIO0 to turn HIGH signalling transmission finish
-	while (self._interruptPin.value() == 0 and self._millis()-txStart < RF69_TX_LIMIT_MS):
+	while (self.interruptSeen == False):
 	    pass
-        self._setMode(RF69_MODE_STANDBY)
+        self.interruptSeen == False
+        if requestACK==True:
+            self._receiveBegin()
+        else:
+            self._setMode(RF69_MODE_STANDBY)
 
-    def _interruptHandler(self):
-        #print(self._mode, RF69_MODE_RX, self._readReg(REG_IRQFLAGS2), RF_IRQFLAGS2_PAYLOADREADY)
-	if (self._mode == RF69_MODE_RX and (self._readReg(REG_IRQFLAGS2) & RF_IRQFLAGS2_PAYLOADREADY)):
+    def _interruptHandler(self, pin):
+        irqFlags2 = self._readReg(REG_IRQFLAGS2)
+        #print(self._mode, RF69_MODE_RX, irqFlags2, RF_IRQFLAGS2_PAYLOADREADY)
+	if self._mode == RF69_MODE_TX and (irqFlags2 & RF_IRQFLAGS2_PACKETSENT !=0):
+            self.interruptSeen = True # let _sendFrame know transmit is done
+            return
+        if (self._mode == RF69_MODE_RX and (irqFlags2 & RF_IRQFLAGS2_PAYLOADREADY)):
 	    self._setMode(RF69_MODE_STANDBY)
 	    self._select()
 	    self.spi.write(bytearray([REG_FIFO & 0x7f]))
@@ -196,7 +208,8 @@ class RFM69(BaseRadio):
 	    CTLbyte = self.spi.read(1)[0]
             
 	    self.ACK_RECEIVED = CTLbyte & 0x80 #extract ACK-requested flag
-	    self.ACK_REQUESTED = CTLbyte & 0x40 #extract ACK-received flag
+            self.ACK_REQUESTED = CTLbyte & 0x40 #extract ACK-received flag
+            #print(self.DATALEN, self.ACK_RECEIVED)
             
 	    self.DATA = self.spi.read(self.DATALEN)
 	    self._unselect()
@@ -218,7 +231,7 @@ class RFM69(BaseRadio):
 	self.ACK_RECEIVED = 0
 	self.RSSI = 0
 	if (self._readReg(REG_IRQFLAGS2) & RF_IRQFLAGS2_PAYLOADREADY):
-	    # avoid RX deadlocks
+	    # avoid RX deadlocks, but does this throw away an ack?
 	    self._writeReg(REG_PACKETCONFIG2, (self._readReg(REG_PACKETCONFIG2) & 0xFB) | RF_PACKET2_RXRESTART)
 	#set DIO0 to "PAYLOADREADY" in receive mode
 	self._writeReg(REG_DIOMAPPING1, RF_DIOMAPPING1_DIO0_01) 
@@ -329,7 +342,11 @@ class RFM69(BaseRadio):
     # Should be polled immediately after sending a packet with ACK request
     def ACKReceived(self, fromNodeID):
 	if self.receiveDone():
-	    return (self.SENDERID == fromNodeID or fromNodeID == RF69_BROADCAST_ADDR) and self.ACK_RECEIVED
+            if ((self.SENDERID == fromNodeID or fromNodeID == RF69_BROADCAST_ADDR)
+                    and (self.ACK_RECEIVED != 0)):
+                return True
+            else:
+                print ("receiveDone but not ack?")
 	return False
 
     #check whether an ACK was requested in the last received packet (non-broadcasted packet)
@@ -348,11 +365,8 @@ class RFM69(BaseRadio):
 	self.RSSI = _RSSI #restore payload RSSI
 	
     def receiveDone(self):
-	self._noInterrupts() #re-enabled in _unselect() via _setMode() or via _receiveBegin()
-	if self._interruptPin.value():
-	    self._interruptHandler()
 	if (self._mode == RF69_MODE_RX and self.PAYLOADLEN > 0):
-	    self._setMode(RF69_MODE_STANDBY) #enables interrupts
+	    #self._setMode(RF69_MODE_STANDBY) #enables interrupts>
 	    return True
       	elif (self._mode == RF69_MODE_RX):  #already in RX no payload yet
 	    self._interrupts() #explicitly re-enable interrupts
