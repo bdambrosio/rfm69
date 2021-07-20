@@ -76,16 +76,15 @@ class RFM69(BaseRadio):
     _powerLevel = 31
     _isRFM69HW = True
     
-    def __init__(self, isRFM69HW=True, intPin=2, csPin=3, rstPin=5):
+    def __init__(self, isRFM69HW=True, spiBus=0, intPin=2, csPin=3, rstPin=5):
 	self._isRFM69HW = isRFM69HW
         
-	self.spi = SPI(0)
+	self.spi = SPI(spiBus)
 	self._intPin = Pin(intPin, Pin.IN)
 	self._csPin = Pin(csPin, Pin.OUT)
         self._rstPin = Pin(rstPin, Pin.OUT)
         self.start_time = time.time()
-        self.interruptSeen = False # used to make sure we send end_of_transmit interrupt
-        self._intPin.irq(trigger=Pin.IRQ_RISING, handler=self._interruptHandler)
+        self.packetSentIrq = False # used to make sure we send end_of_transmit interrupt
 
     # Convention I want to stick to is a single underscore to indicate "private" methods.
     # I'm grouping all the private stuff up at the beginning.
@@ -113,8 +112,10 @@ class RFM69(BaseRadio):
     # Unselect the transceiver chip
     def _unselect(self): 
 	self._csPin.value(1)
-	
+    
     def _setMode(self, newMode):
+        if newMode == self._mode:
+            return
 	if newMode == RF69_MODE_TX:
 	    self._writeReg(REG_OPMODE, (self._readReg(REG_OPMODE) & 0xE3) | RF_OPMODE_TRANSMITTER)
 	    if self._isRFM69HW:
@@ -133,11 +134,16 @@ class RFM69(BaseRadio):
 	# we are using packet mode, so this check is not really needed
 	# but waiting for mode ready is necessary when going from sleep because the FIFO may not 
 	# be immediately available from previous mode
-	while (self._mode == RF69_MODE_SLEEP and (self._readReg(REG_IRQFLAGS1) & RF_IRQFLAGS1_MODEREADY) == 0x00): # Wait for ModeReady
+
+        # Wait for ModeReady
+	while (self._mode == RF69_MODE_SLEEP and (self._readReg(REG_IRQFLAGS1) & RF_IRQFLAGS1_MODEREADY) == 0x00): 
 	    pass
 	self._mode = newMode
 
     def _canSend(self):
+        if self._mode == RF69_MODE_STANDBY:
+            self._receiveBegin()
+            return True
 	#if signal stronger than -100dBm is detected assume channel activity
 	#DNU - will ALWAYS return true on second call, no?
         if (self._mode == RF69_MODE_RX and self.PAYLOADLEN == 0 and self.readRSSI() < CSMA_LIMIT): 
@@ -146,47 +152,46 @@ class RFM69(BaseRadio):
 	return False
 
     def _sendFrame(self, toAddress, buffer, bufferSize, requestACK=True, sendACK=False):
-	self._setMode(RF69_MODE_STANDBY) #turn off receiver to prevent reception while filling fifo
+        #turn off receiver to prevent reception while filling fifo
+	self._setMode(RF69_MODE_STANDBY) 
 	while ((self._readReg(REG_IRQFLAGS1) & RF_IRQFLAGS1_MODEREADY) == 0x00):
 	    pass # Wait for ModeReady
-	self._writeReg(REG_DIOMAPPING1, RF_DIOMAPPING1_DIO0_00) # DIO0 is "Packet Sent"
+
+        self._writeReg(REG_DIOMAPPING1, RF_DIOMAPPING1_DIO0_00) # DIO0 is "Packet Sent"
 	if bufferSize > RF69_MAX_DATA_LEN:
 	    bufferSize = RF69_MAX_DATA_LEN
 
 	#write to FIFO
 	self._select()
-	self.spi.write(bytearray([REG_FIFO | 0x80, bufferSize + 3, toAddress, self._address]))
+        ack = 0
+        if sendACK:
+            ack = 0x80
+        elif requestACK:
+            ack = 0x40
+	self.spi.write(bytearray([REG_FIFO | 0x80, bufferSize + 3, toAddress, self._address, ack]))
         
-	#control byte
-	if (sendACK):
-	    self.spi.write(bytearray([0x80]))
-	elif (requestACK):
-	    self.spi.write(bytearray([0x40]))
-	else:
-	    self.spi.write(bytearray([0x00]))
 	bufferBytes = []
 	for i in range(0, bufferSize):
 	    self.spi.write(bytearray([ord(buffer[i])]))
 	self._unselect()
 
 	# no need to wait for transmit mode to be ready since its handled by the radio
-        self.interruptSeen = False
+        self.packetSentIrq = False
 	self._setMode(RF69_MODE_TX)
-	txStart = self._millis()
 	# wait for DIO0 to turn HIGH signalling transmission finish
-	while (self.interruptSeen == False):
+	while (self.packetSentIrq == False and (self._readReg(REG_IRQFLAGS2) & RF_IRQFLAGS2_PACKETSENT == 0x00)):
 	    pass
-        self.interruptSeen == False
+        self.packetSentIrq == False
         if requestACK==True:
             self._receiveBegin()
         else:
-            self._setMode(RF69_MODE_STANDBY)
+            self._setMode(RF69_MODE_RX)
 
     def _interruptHandler(self, pin):
         irqFlags2 = self._readReg(REG_IRQFLAGS2)
         #print(self._mode, RF69_MODE_RX, irqFlags2, RF_IRQFLAGS2_PAYLOADREADY)
 	if self._mode == RF69_MODE_TX and (irqFlags2 & RF_IRQFLAGS2_PACKETSENT !=0):
-            self.interruptSeen = True # let _sendFrame know transmit is done
+            self.packetSentIrq = True # let _sendFrame know transmit is done
             return
         if (self._mode == RF69_MODE_RX and (irqFlags2 & RF_IRQFLAGS2_PAYLOADREADY)):
 	    self._setMode(RF69_MODE_STANDBY)
@@ -197,7 +202,8 @@ class RFM69(BaseRadio):
 	    self.TARGETID = self.spi.read(1)[0]
 	    # match this node's address, or broadcast address or anything in promiscuous mode
 	    # address situation could receive packets that are malformed and don't fit this libraries extra fields
-	    if(not(self._promiscuousMode or self.TARGETID==self._address or self.TARGETID==RF69_BROADCAST_ADDR) or self.PAYLOADLEN < 3):
+	    if(not(self._promiscuousMode or self.TARGETID==self._address or self.TARGETID==RF69_BROADCAST_ADDR)
+               or self.PAYLOADLEN < 3):
 		self.PAYLOADLEN = 0
 		self._unselect()
 		self._receiveBegin()
@@ -286,7 +292,8 @@ class RFM69(BaseRadio):
         print("attempting to sync")
         while self._readReg(REG_SYNCVALUE1) != 0xaa:
 	    self._writeReg(REG_SYNCVALUE1, 0xaa)
-	while self._readReg(REG_SYNCVALUE1) != 0x55:
+	print("0xaa sync...")
+        while self._readReg(REG_SYNCVALUE1) != 0x55:
 	    self._writeReg(REG_SYNCVALUE1, 0x55)
         print("sync successful")
         
@@ -299,7 +306,9 @@ class RFM69(BaseRadio):
 	# wait for mode ready
 	while (self._readReg(REG_IRQFLAGS1) & RF_IRQFLAGS1_MODEREADY) == 0x00:
 	    pass
-	self._interrupts()
+        # init interrupt
+        self._intPin.irq(trigger=Pin.IRQ_RISING, handler=self._interruptHandler)
+
 
     def sleep(self):
 	self._setMode(RF69_MODE_SLEEP)
@@ -351,7 +360,7 @@ class RFM69(BaseRadio):
 
     #check whether an ACK was requested in the last received packet (non-broadcasted packet)
     def ACKRequested(self):
-	return self.ACK_REQUESTED and (self.TARGETID != RF69_BROADCAST_ADDR)
+	return (self.ACK_REQUESTED and (self.TARGETID != RF69_BROADCAST_ADDR)) != 0
 
     # Should be called immediately after reception in case sender wants ACK
     def sendACK(self, buffer="", bufferSize=0):
@@ -359,18 +368,23 @@ class RFM69(BaseRadio):
 	_RSSI = self.RSSI #save payload received RSSI value
 	self._writeReg(REG_PACKETCONFIG2, (self._readReg(REG_PACKETCONFIG2) & 0xFB) | RF_PACKET2_RXRESTART) # avoid RX deadlocks
 	now = self._millis()
-	while (not self._canSend() and self._millis()-now < RF69_CSMA_LIMIT_MS):
+	while not self._canSend():
 	    self.receiveDone()
 	self._sendFrame(sender, buffer, bufferSize, False, True)
 	self.RSSI = _RSSI #restore payload RSSI
 	
     def receiveDone(self):
-	if (self._mode == RF69_MODE_RX and self.PAYLOADLEN > 0):
-	    #self._setMode(RF69_MODE_STANDBY) #enables interrupts>
+	if (self._mode == RF69_MODE_RX  or self._mode == RF69_MODE_STANDBY) and (self.PAYLOADLEN > 0):
+	    self._setMode(RF69_MODE_STANDBY) #enables interrupts>
 	    return True
-      	elif (self._mode == RF69_MODE_RX):  #already in RX no payload yet
-	    self._interrupts() #explicitly re-enable interrupts
-	    return False
+        if (self._readReg(REG_IRQFLAGS1) & RF_IRQFLAGS1_TIMEOUT) != 0:
+            # https://github.com/russss/rfm69-python/blob/master/rfm69/rfm69.py#L112
+            # Russss figured out that if you leave alone long enough it times out
+            # tell it to stop being silly and listen for more packets
+            self._writeReg(REG_PACKETCONFIG2, (self._readReg(REG_PACKETCONFIG2) & 0xFB) | RF_PACKET2_RXRESTART)
+        elif self._mode == RF69_MODE_RX:
+            # already in RX no payload yet
+            return False
 	self._receiveBegin()
 	return False
 	

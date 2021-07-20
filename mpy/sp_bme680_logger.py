@@ -37,19 +37,23 @@ def main():
         payload = [{},{},{},{}]
 	while True:
             payload[0]['msg_id'] = msg_id
-            payload[0]['tmp'] = bme.temperature
+            payload[0]['measure'] = 'tmp'
+            payload[0]['value'] = bme.temperature
             msg_id+=1
 
             payload[1]['msg_id'] = msg_id
-            payload[1]['hum'] = bme.humidity
+            payload[1]['measure'] = 'hum'
+            payload[1]['value'] = bme.humidity
             msg_id+=1
 
             payload[2]['msg_id'] = msg_id
-            payload[2]['atmp'] = bme.pressure
+            payload[2]['measure'] = 'atmp'
+            payload[2]['value'] = bme.pressure
             msg_id+=1
 
             payload[3]['msg_id'] = msg_id
-            payload[3]['vols']  = bme.gas
+            payload[3]['measure']  = 'vols'
+            payload[3]['value']  = bme.gas
             msg_id+=1
 
             for i in range(0,4):
