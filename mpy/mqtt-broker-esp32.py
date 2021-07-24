@@ -15,21 +15,22 @@ import umqtt.simple as mqtt
 import time
 
 
-NODEID		= 1    #unique for each node on same network
+NODEID      = 1    #unique for each node on same network
 PARTNERID       = 2
-NETWORKID	= 61  #the same on all nodes that talk to each other
-FREQUENCY	= rfm69.RF69_915MHZ
-ENCRYPTKEY	= "sampleEncryptKey" #exactly the same 16 characters/bytes on all nodes!
-IS_RFM69HW	= False #uncomment only for RFM69HW! Leave out if you have RFM69W!
-ACK_TIME	= 100 # max # of ms to wait for an ack
-RETRIES		= 2
+NETWORKID   = 61  #the same on all nodes that talk to each other
+FREQUENCY   = rfm69.RF69_915MHZ
+ENCRYPTKEY  = "sampleEncryptKey" #exactly the same 16 characters/bytes on all nodes!
+IS_RFM69HW  = False #uncomment only for RFM69HW! Leave out if you have RFM69W!
+ACK_TIME    = 100 # max # of ms to wait for an ack
+RETRIES     = 2
 IS_RFM69HW      = True
 
 #get network object so we can check connection status
 sta_if = network.WLAN(network.STA_IF);
 
 def mqtt_cb(topic, msg):
-    print("mqtt callback: ", topic, msg)
+    #print("mqtt callback: ", topic, msg)
+    pass
     
 def main():
 # start mqtt client
@@ -38,17 +39,17 @@ def main():
 
     mqtt_client.set_callback(mqtt_cb)
     # now actually establish initial connection
-    print("New session being set up")
+    #print("New session being set up")
     mqtt_client.connect()
     mqtt_payload = {'measure':'', 'value':0}
     
-    radio = rfm69.RFM69(isRFM69HW=True, spiBus=1, csPin=15, intPin=34, rstPin=33)
+    radio = rfm69.RFM69(isRFM69HW=True, spiBus=2, csPin=5, intPin=34, rstPin=33, debug=True)
     radio.initialize(FREQUENCY,NODEID,NETWORKID)
-    print ("Operating at {} Mhz...".format(915))
-	
+    #print ("Operating at {} Mhz...".format(915))
+    radio._receiveBegin()
     while True:
         if not sta_if.isconnected():
-            print("network connection lost")
+            #print("network connection lost")
             while not sta_if.connect():
                 # If the connection is successful, the is_conn_issue
                 # method will not return a connection error.
@@ -59,6 +60,7 @@ def main():
         #check for any received packets
         rrd = radio.receiveDone()
         if rrd:
+            #print(radio.DATA[0:radio.DATALEN])
             rvcd_msg = radio.DATA[0:radio.DATALEN]
             sender = radio.SENDERID
             msg_len=radio.DATALEN

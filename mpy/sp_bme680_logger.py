@@ -72,9 +72,9 @@ def main():
                         else:
                             time.sleep(.01)
                 print("  ack: ", ack)
-                time.sleep(.2) #between packets of a measurement
+                time.sleep(.1) #between packets of a measurement
 
-            time.sleep(2) # between measurements
+            time.sleep(10) # between measurements
             gc.collect()
 
 print("init")
