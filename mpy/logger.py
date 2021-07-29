@@ -2,7 +2,9 @@
 
 # bme680/RFM69 indoor sensor 
 #https://randomnerdtutorials.com/bme680-sensor-arduino-gas-temperature-humidity-pressure/
-from bme680 import *
+import bme680
+from bme680 import BME680
+from bme680 import constants as bme_const
 import machine
 from machine import I2C, Pin
 from radios import rfm69
@@ -25,14 +27,18 @@ np.pixels_set(0, np.COLORS[1]) # red
 np.pixels_show()
 
 # note below scl/sda is for Sparkfun RP2040 pro micro QWIC connector
-bme = BME680_I2C(I2C(0, scl=Pin(17), sda=Pin(16)), refresh_rate=.1)
-bme.temperature_oversample = 8
-bme.humidity_oversample = 2
-bme.pressure_0versample = 4
-bme.filter_size = 7
-#bme.setGasHeater(320, 150); # 320*C for 150 ms
+bme = bme680.BME680(i2c_device=I2C(0, scl=Pin(17), sda=Pin(16)), i2c_addr=0x77)
+bme.set_humidity_oversample(bme_const.OS_2X)
+bme.set_pressure_oversample(bme_const.OS_4X)
+bme.set_temperature_oversample(bme_const.OS_8X)
+bme.set_filter(bme_const.FILTER_SIZE_3)
 
-#print("sensor initialized")
+bme.set_gas_status(bme_const.ENABLE_GAS_MEAS)
+bme.set_gas_heater_temperature(320)
+bme.set_gas_heater_duration(150)
+bme.select_gas_heater_profile(0)
+
+print("sensor initialized")
 #print(bme.temperature, bme.humidity, bme.pressure, bme.gas)
 def flash():
     for color in np.COLORS:         
@@ -57,35 +63,42 @@ def report():
     payload = [{},{},{},{}]
     msg_id=0
     for i in range(2):
-        try:
+        print("get sensor data...")
+        if bme.get_sensor_data():
+          try:
+            print("got it, formatting...")
             payload[0]['msg_id'] = msg_id
             payload[0]['measure'] = 'tmp'
-            payload[0]['value'] = bme.temperature
+            payload[0]['value'] = bme.data.temperature
             msg_id+=1
 
             payload[1]['msg_id'] = msg_id
             payload[1]['measure'] = 'hum'
-            payload[1]['value'] = bme.humidity
+            payload[1]['value'] = bme.data.humidity
             msg_id+=1
 
             payload[2]['msg_id'] = msg_id
             payload[2]['measure'] = 'atmp'
-            payload[2]['value'] = bme.pressure
+            payload[2]['value'] = bme.data.pressure
             msg_id+=1
 
-            payload[3]['msg_id'] = msg_id
-            payload[3]['measure']  = 'vols'
-            payload[3]['value']  = bme.gas
-            msg_id+=1
+            gas_stable = bme.data.heat_stable
+            if gas_stable:
+                payload[3]['msg_id'] = msg_id
+                payload[3]['measure']  = 'vols'
+                payload[3]['value']  = bme.data.gas_resistance
+                msg_id+=1
         
             np.pixels_set(0, np.COLORS[3]) # green, data acquired
             np.pixels_show()
             time.sleep(.5)
         
+            print("formatted, sending")
             for i in range(0,4):
+              if i < 3 or gas_stable:
                 data = json.dumps(payload[i])
                 #print("")
-                #print("Sending: {} ".format( data))
+                print("Sending: {} ".format( data))
                 ack = False
                 radio.send(PARTNERID, data, len(data), True)
                 if radio.ACKReceived(PARTNERID):
@@ -100,7 +113,7 @@ def report():
                 #print("  ack: ", ack)
                 time.sleep(.1) #between packets of a measurement
             flash() # data sent
-        except: #attempt to fetch and report measurements failed
+          except: #attempt to fetch and report measurements failed
             for i in range(3):
                 np.pixels_set(0, np.COLORS[5]) # exception in data acquisition
                 np.pixels_show()
@@ -109,11 +122,11 @@ def report():
                 np.pixels_show()
                 time.sleep(.1)
             
-        time.sleep(10) # between measurements
-        #gc.collect()
+          time.sleep(10) # between measurements
 
 def main():
-    report()
-    machine.deepsleep(600)
+    while True:
+        report()
+        time.sleep(10)
     
 main()
