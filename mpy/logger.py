@@ -11,7 +11,7 @@ from radios import rfm69
 import utime as time
 import ujson as json
 import gc
-import np
+import neopixel as np
 
 NODEID      = 2    #unique for each node on same network
 PARTNERID       = 1
@@ -62,7 +62,7 @@ time.sleep(2)
 def report():
     payload = [{},{},{},{}]
     msg_id=0
-    for i in range(2):
+    for i in range(3):
         print("get sensor data...")
         if bme.get_sensor_data():
           try:
@@ -122,11 +122,11 @@ def report():
                 np.pixels_show()
                 time.sleep(.1)
             
-          time.sleep(10) # between measurements
+          time.sleep(1) # between measurements
 
 def main():
     while True:
         report()
-        time.sleep(10)
+        machine.deepsleep(120)
     
 main()

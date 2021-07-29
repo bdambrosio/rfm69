@@ -46,7 +46,7 @@ class BME680(BME680Data):
             self.chip_id = self._get_regs(constants.CHIP_ID_ADDR, 1)
             if self.chip_id != constants.CHIP_ID:
                 raise RuntimeError('BME680 Not Found. Invalid CHIP ID: 0x{0:02x}'.format(self.chip_id))
-        except IOError:
+        except OSError:
             raise RuntimeError("Unable to identify BME680 at 0x{:02x} (IOError)".format(self.i2c_addr))
 
         self._variant = self._get_regs(constants.CHIP_VARIANT_ADDR, 1)
@@ -342,16 +342,16 @@ class BME680(BME680Data):
     def _set_regs(self, register, value):
         """Set one or more registers."""
         if isinstance(value, int):
-            self._i2c.write_byte_data(self.i2c_addr, register, value)
+            self._i2c.writeto_mem(self.i2c_addr, register, bytearray([value]))
         else:
-            self._i2c.write_i2c_block_data(self.i2c_addr, register, value)
+            self._i2c.writeto_mem(self.i2c_addr, register, value)
 
     def _get_regs(self, register, length):
         """Get one or more registers."""
         if length == 1:
-            return self._i2c.read_byte_data(self.i2c_addr, register)
+            return self._i2c.readfrom_mem(self.i2c_addr, register, 1)[0]
         else:
-            return self._i2c.read_i2c_block_data(self.i2c_addr, register, length)
+            return self._i2c.readfrom_mem(self.i2c_addr, register, length)
 
     def _calc_temperature(self, temperature_adc):
         """Convert the raw temperature to degrees C using calibration_data."""
