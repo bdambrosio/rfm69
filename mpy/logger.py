@@ -4,7 +4,7 @@
 #https://randomnerdtutorials.com/bme680-sensor-arduino-gas-temperature-humidity-pressure/
 import bme680
 from bme680 import BME680
-from bme680 import constants as bme_const
+from bme680 import constants as bme_consts
 import machine
 from machine import I2C, Pin
 from radios import rfm69
@@ -28,12 +28,12 @@ np.pixels_show()
 
 # note below scl/sda is for Sparkfun RP2040 pro micro QWIC connector
 bme = bme680.BME680(i2c_device=I2C(0, scl=Pin(17), sda=Pin(16)), i2c_addr=0x77)
-bme.set_humidity_oversample(bme_const.OS_2X)
-bme.set_pressure_oversample(bme_const.OS_4X)
-bme.set_temperature_oversample(bme_const.OS_8X)
-bme.set_filter(bme_const.FILTER_SIZE_3)
+bme.set_humidity_oversample(bme_consts.OS_2X)
+bme.set_pressure_oversample(bme_consts.OS_4X)
+bme.set_temperature_oversample(bme_consts.OS_8X)
+bme.set_filter(bme_consts.FILTER_SIZE_3)
 
-bme.set_gas_status(bme_const.ENABLE_GAS_MEAS)
+bme.set_gas_status(bme_consts.ENABLE_GAS_MEAS)
 bme.set_gas_heater_temperature(320)
 bme.set_gas_heater_duration(150)
 bme.select_gas_heater_profile(0)
@@ -65,6 +65,9 @@ def report():
     for i in range(3):
         print("get sensor data...")
         if bme.get_sensor_data():
+          if i < 1:
+              print("skipping first reading")
+              continue # ignore first reading
           try:
             print("got it, formatting...")
             payload[0]['msg_id'] = msg_id
@@ -126,7 +129,9 @@ def report():
 
 def main():
     while True:
+        bme. set_power_mode(bme_consts.FORCED_MODE)
         report()
-        machine.deepsleep(120)
+        bme. set_power_mode(bme_consts.SLEEP_MODE)
+        time.sleep(20)
     
 main()
