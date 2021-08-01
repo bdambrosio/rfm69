@@ -75,11 +75,16 @@ def main():
                 mqtt_msg = json.dumps(mqtt_payload)
                 mqtt_client.publish(topic='home/sensor'+str(sender)+'/'+measure,
                                     msg=mqtt_msg)
+            except ValueError as e:
+                print('corrupt json',e,msg)
+                pass
             except KeyError as e:
                 pass
                 #print("missing key: ", e)
             except OSError as e:
                 pass
                 #print('error handling radio msg', e, msg)
+            except Error as e:
+                print ('error', e)
 
 main()
