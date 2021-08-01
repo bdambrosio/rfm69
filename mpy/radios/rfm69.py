@@ -85,7 +85,7 @@ class RFM69(BaseRadio):
         self._rstPin = Pin(rstPin, Pin.OUT)
         self.start_time = time.time()
         self._packetSentIrq = False # used to make sure we send end_of_transmit interrupt
-        self._debug=False
+        self._debug=debug
         
     # Convention I want to stick to is a single underscore to indicate "private" methods.
     # I'm grouping all the private stuff up at the beginning.
@@ -189,9 +189,10 @@ class RFM69(BaseRadio):
             self._setMode(RF69_MODE_RX)
 
     def _interruptHandler(self, pin):
+        irqFlags1 = self._readReg(REG_IRQFLAGS1)
         irqFlags2 = self._readReg(REG_IRQFLAGS2)
         if self._debug:
-            print(self._mode, RF69_MODE_RX, irqFlags2, RF_IRQFLAGS2_PAYLOADREADY)
+            print(self._mode, RF69_MODE_RX, irqFlags1, irqFlags2, RF_IRQFLAGS2_PAYLOADREADY)
         if self._mode == RF69_MODE_TX and (irqFlags2 & RF_IRQFLAGS2_PACKETSENT !=0):
             self._packetSentIrq = True # let _sendFrame know transmit is done
             return

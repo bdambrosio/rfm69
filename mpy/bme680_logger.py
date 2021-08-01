@@ -13,6 +13,7 @@ import ujson as json
 import gc
 import neopixel as np
 
+
 NODEID      = 2    #unique for each node on same network
 PARTNERID       = 1
 NETWORKID   = 61  #the same on all nodes that talk to each other
@@ -22,9 +23,11 @@ IS_RFM69HW  = True #uncomment only for RFM69HW! Leave out if you have RFM69W!
 ACK_TIME    = 30 # max # of ms to wait for an ack
 RETRIES     = 2
 IS_RFM69HW      = True
-
+TEMPERATURE_BIAS = 2.0
+HUMIDITY_BIAS = -4.0
 np.pixels_set(0, np.COLORS[1]) # red
 np.pixels_show()
+
 
 # note below scl/sda is for Sparkfun RP2040 pro micro QWIC connector
 bme = bme680.BME680(i2c_device=I2C(0, scl=Pin(17), sda=Pin(16)), i2c_addr=0x77)
@@ -44,7 +47,7 @@ def flash():
     for color in np.COLORS:         
         np.pixels_fill(color)  
         np.pixels_show()  
-        time.sleep(0.1)
+        time.sleep(0.05)
     np.pixels_set(0, np.COLORS[1]) # red
     np.pixels_show()
     
@@ -58,50 +61,52 @@ radio.initialize(FREQUENCY,NODEID,NETWORKID)
 
 flash() # radio initialized
 time.sleep(2)
+time_of_last_xmit = 0
 
 def report():
+    global time_of_last_xmit
     payload = [{},{},{},{}]
     msg_id=0
-    for i in range(3):
-        print("get sensor data...")
-        if bme.get_sensor_data():
-          if i < 1:
-              print("skipping first reading")
-              continue # ignore first reading
-          try:
-            print("got it, formatting...")
-            payload[0]['msg_id'] = msg_id
-            payload[0]['measure'] = 'tmp'
-            payload[0]['value'] = bme.data.temperature
-            msg_id+=1
+    #print("get sensor data...")
+    try:
+        while (not bme.get_sensor_data()):
+            time.sleep(.1)
+        #print("got it, formatting...")
+        payload[0]['msg_id'] = msg_id
+        payload[0]['measure'] = 'tmp'
+        payload[0]['value'] = bme.data.temperature - TEMPERATURE_BIAS
+        msg_id+=1
 
-            payload[1]['msg_id'] = msg_id
-            payload[1]['measure'] = 'hum'
-            payload[1]['value'] = bme.data.humidity
-            msg_id+=1
+        payload[1]['msg_id'] = msg_id
+        payload[1]['measure'] = 'hum'
+        payload[1]['value'] = bme.data.humidity - HUMIDITY_BIAS
+        msg_id+=1
 
-            payload[2]['msg_id'] = msg_id
-            payload[2]['measure'] = 'atmp'
-            payload[2]['value'] = bme.data.pressure
-            msg_id+=1
+        payload[2]['msg_id'] = msg_id
+        payload[2]['measure'] = 'atmp'
+        payload[2]['value'] = bme.data.pressure
+        msg_id+=1
 
-            gas_stable = bme.data.heat_stable
-            if gas_stable:
-                payload[3]['msg_id'] = msg_id
-                payload[3]['measure']  = 'vols'
-                payload[3]['value']  = bme.data.gas_resistance
-                msg_id+=1
+        gas_stable = bme.data.heat_stable
+        if gas_stable:
+            payload[3]['msg_id'] = msg_id
+            payload[3]['measure']  = 'vols'
+            payload[3]['value']  = bme.data.gas_resistance
+            msg_id+=1
         
-            np.pixels_set(0, np.COLORS[3]) # green, data acquired
-            np.pixels_show()
-            time.sleep(.5)
+        np.pixels_set(0, np.COLORS[3]) # green, data acquired
+        np.pixels_show()
         
-            print("formatted, sending")
-            for i in range(0,4):
-              if i < 3 or gas_stable:
+        if int(time.time()) - time_of_last_xmit < 60:
+            #print ("skipping", int(time.time()), int(time_of_last_xmit))
+            return
+        #print("formatted, sending")
+        time_of_last_xmit = int(time.time())
+        for i in range(0,4):
+            if i < 3 or gas_stable:
                 data = json.dumps(payload[i])
                 #print("")
-                print("Sending: {} ".format( data))
+                #print("Sending: {} ".format( data))
                 ack = False
                 radio.send(PARTNERID, data, len(data), True)
                 if radio.ACKReceived(PARTNERID):
@@ -114,24 +119,23 @@ def report():
                         else:
                             time.sleep(.01)
                 #print("  ack: ", ack)
-                time.sleep(.1) #between packets of a measurement
-            flash() # data sent
-          except: #attempt to fetch and report measurements failed
-            for i in range(3):
-                np.pixels_set(0, np.COLORS[5]) # exception in data acquisition
-                np.pixels_show()
-                time.sleep(.2)
-                np.pixels_set(0, np.COLORS[0]) # exception in data acquisition
-                np.pixels_show()
-                time.sleep(.1)
-            
-          time.sleep(1) # between measurements
+            time.sleep(.05) #between packets of a measurement
+        flash() # data sent
+    except Exception as e: #attempt to fetch and report measurements failed
+        print(str(e))
+        for i in range(3):
+            np.pixels_set(0, np.COLORS[5]) # exception in data acquisition
+            np.pixels_show()
+            time.sleep(.2)
+            np.pixels_set(0, np.COLORS[0]) # exception in data acquisition
+            np.pixels_show()
+            time.sleep(.1)            
 
 def main():
     while True:
-        bme. set_power_mode(bme_consts.FORCED_MODE)
+        #bme. set_power_mode(bme_consts.FORCED_MODE)
         report()
-        bme. set_power_mode(bme_consts.SLEEP_MODE)
-        time.sleep(20)
+        #bme. set_power_mode(bme_consts.SLEEP_MODE)
+        time.sleep(1)
     
 main()

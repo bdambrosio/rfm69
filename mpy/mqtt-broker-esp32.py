@@ -13,7 +13,7 @@ from radios import rfm69_registers
 import json
 import umqtt.simple as mqtt
 import time
-
+from boot import ssid, password
 
 NODEID      = 1    #unique for each node on same network
 PARTNERID       = 2
@@ -33,7 +33,7 @@ def mqtt_cb(topic, msg):
     pass
     
 def main():
-# start mqtt client
+    # start mqtt client
     mqtt_client=mqtt.MQTTClient('pvDisplay_mqtt', '192.168.1.101', user='mosq', password='1947nw')
     # Print diagnostic messages when retries/reconnects happens
 
@@ -48,19 +48,19 @@ def main():
     #print ("Operating at {} Mhz...".format(915))
     radio._receiveBegin()
     while True:
-        if not sta_if.isconnected():
-            #print("network connection lost")
-            while not sta_if.connect():
-                # If the connection is successful, the is_conn_issue
-                # method will not return a connection error.
-                print("reconnecting to network")
-                sta_if.connect()
+        try:
+            if not sta_if.isconnected():
+                print("network connection lost")
+                while not sta_if.isconnected():
+                    sta_if.connect(ssid, password)
                 mqtt_client.reconnect()
-        #mqtt_client.chk_msg()
+                print("reconnected")
+        except:
+            continue
         #check for any received packets
         rrd = radio.receiveDone()
         if rrd:
-            #print(radio.DATA[0:radio.DATALEN])
+            print(radio.DATA[0:radio.DATALEN])
             rvcd_msg = radio.DATA[0:radio.DATALEN]
             sender = radio.SENDERID
             msg_len=radio.DATALEN
@@ -76,8 +76,10 @@ def main():
                 mqtt_client.publish(topic='home/sensor'+str(sender)+'/'+measure,
                                     msg=mqtt_msg)
             except KeyError as e:
-                print("missing key: ", e)
+                pass
+                #print("missing key: ", e)
             except OSError as e:
-                print('error handling radio msg', e, msg)
+                pass
+                #print('error handling radio msg', e, msg)
 
 main()

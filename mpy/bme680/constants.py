@@ -1,7 +1,7 @@
 """BME680 constants, structures and utilities."""
 
 # BME680 General config
-POLL_PERIOD_MS = 10
+POLL_PERIOD_MS = 15
 
 # BME680 I2C addresses
 I2C_ADDR_PRIMARY = 0x76
@@ -108,7 +108,7 @@ SLEEP_MODE = 0
 FORCED_MODE = 1
 
 # Delay related macro declaration
-RESET_PERIOD = 10
+RESET_PERIOD = 20
 
 # SPI memory page settings
 MEM_PAGE0 = 0x10
