@@ -1,10 +1,10 @@
 # rfm69
 Python3 and micropython (1.15) code for RFM69 - Pi0/4 &lt;-> Pico/SparkfunProMicro!
 
-mpy dir contains micropython code. etrombly (with recent python3 mods) python code converted to micropython 1.15.
+mpy dir contains micropython code. WCalvert (with recent python3 mods) python code converted to micropython 1.15.
 
 py dir contains a couple of client python3 scripts plus a lightly modified version of
-kitterly (rpi-rfm69) port of etrombly. 
+WCalvert python code (https://github.com/wcalvert/rfm69-python). 
 
 **Notes:**
 1. While python side supports the 'packet' object, the micropython side does not. Probably easy to add, but smaller as is. Note this means you need to grab data on micropython side quickly, see 'echo.py' as an example
@@ -18,6 +18,6 @@ kitterly (rpi-rfm69) port of etrombly.
 5. RPi-rfm69 needed a short delay before sending ack so that sparkfun RP2040 pro micro would see the ack. You may need a longer delay if running a different micro, or. Not well tested (eg, I tested without encryption)
   
 6. This library uses interrputs, need to define reset, cs, and interrupt pins on both sides
-7. Thanks to both etrombly and Kitterly for the starting points. I'm not an open-source guru, apologies to anyone if I've violated any protocols about using their code, let me know and I'll fix.
+7. Thanks to both WCalvert and Kitterly for the starting points. Mostly this is a port of WClavert's python clone of Felix Rusu's RFM69 library. I'm not an open-source guru, apologies to anyone if I've violated any protocols about using their code, let me know and I'll fix.
   
  
