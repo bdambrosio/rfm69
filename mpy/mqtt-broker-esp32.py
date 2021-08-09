@@ -53,20 +53,24 @@ def main():
                 print("network connection lost")
                 while not sta_if.isconnected():
                     sta_if.connect(ssid, password)
-                mqtt_client.reconnect()
+                try:
+                    mqtt_client.disconnect()
+                except:
+                    pass
+                mqtt_client.connect()
                 print("reconnected")
         except:
             continue
         #check for any received packets
-        rrd = radio.receiveDone()
-        if rrd:
-            print(radio.DATA[0:radio.DATALEN])
-            rvcd_msg = radio.DATA[0:radio.DATALEN]
-            sender = radio.SENDERID
-            msg_len=radio.DATALEN
-            if (radio.ACKRequested()):
-                radio.sendACK()
-            try:
+        try:
+            rrd = radio.receiveDone()
+            if rrd:
+                print(radio.DATA[0:radio.DATALEN])
+                rvcd_msg = radio.DATA[0:radio.DATALEN]
+                sender = radio.SENDERID
+                msg_len=radio.DATALEN
+                if (radio.ACKRequested()):
+                    radio.sendACK()
                 msg = json.loads(rvcd_msg)
                 measure = msg['measure']
                 value = msg['value']
@@ -75,16 +79,19 @@ def main():
                 mqtt_msg = json.dumps(mqtt_payload)
                 mqtt_client.publish(topic='home/sensor'+str(sender)+'/'+measure,
                                     msg=mqtt_msg)
-            except ValueError as e:
-                print('corrupt json',e,msg)
-                pass
-            except KeyError as e:
-                pass
-                #print("missing key: ", e)
-            except OSError as e:
-                pass
-                #print('error handling radio msg', e, msg)
-            except Error as e:
-                print ('error', e)
+        except ValueError as e:
+            print('corrupt json',e,msg)
+            radio.initialize(FREQUENCY,NODEID,NETWORKID)
+            radio._receiveBegin()
+        except KeyError as e:
+            print("missing key: ", e)
+        except OSError as e:
+            print('error handling radio msg', e, msg)
+            radio.initialize(FREQUENCY,NODEID,NETWORKID)
+            radio._receiveBegin()
+        except:
+            print ('unrecognized error')
+            radio.initialize(FREQUENCY,NODEID,NETWORKID)
+            radio._receiveBegin()
 
 main()
