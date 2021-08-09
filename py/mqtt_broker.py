@@ -1,44 +1,73 @@
 #!/usr/bin/env python3
 
-from RFM69 import Radio, FREQ_915MHZ
+from radios import rfm69
 import datetime
 import time
 import RPi.GPIO as GPIO
 from icecream import ic
-import logging
+import gc
+import paho.mqtt.client as mqtt
+import json
 
-network_id = 61
-node_id = 1
-is_rfm_69HW = True
+NODEID		= 1    #unique for each node on same network
+PARTNERID       = 2
+NETWORKID	= 61  #the same on all nodes that talk to each other
+FREQUENCY	= rfm69.RF69_915MHZ
+ENCRYPTKEY	= "sampleEncryptKey" #exactly the same 16 characters/bytes on all nodes!
+ACK_TIME	= 40 # max # of ms to wait for an ack
+RETRIES		= 2
+IS_RFM69HW      = True
 
-try:
-    logging.basicConfig(level=logging.DEBUG)
-    logger = logging.getLogger(__name__)
-    handler = logging.StreamHandler()
-    handler.setLevel(logging.DEBUG)
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
-    logger.propagate = False
-    with Radio(FREQ_915MHZ, node_id, network_id, spiBus=1, resetPin=36, interruptPin=29,
-               isHighPower=True, verbose=False) as radio:
-        radio.set_power_level(50)
-        while True:
-            radio.begin_receive()
-            for waiting in range(4 ):
-                if radio.has_received_packet():
-                    packets = radio.get_packets()
-                    for packet in packets:
-                        if radio.send(packet.sender, packet.data_string, require_ack=True):
-                            print("echo ack recieved")
-                        logger.debug(str(packet.sender)+" "+ packet.data_string)
-                    break
-                else:
-                    time.sleep(.05)
+GPIO.cleanup()
 
+def on_message(client, userdata, msg):
+    print("mqtt callback: ", msg.topic, msg.payload)
+    pass
 
-except OSError as e:
-    print("shutting down", e)
-finally:
-    GPIO.cleanup()
+def on_disconnect(client, userdata, rc):
+    if rc != 0:
+        print("unexpected MQTT disconnect", rc)
+        mqtt_client.reconnect()
+    
+# start mqtt client
+mqtt_client=mqtt.Client('rfm_broker')
+# Print diagnostic messages when retries/reconnects happens
+mqtt_client.on_message = on_message
+mqtt_client.on_disconnect = on_disconnect
+# now actually establish initial connection
+#print("New session being set up")
+mqtt_client.username_pw_set('mosq', '1947nw')
+mqtt_client.connect('192.168.1.101')
+mqtt_payload = {'measure':'', 'value':0}
+
+radio = rfm69.RFM69(isRFM69HW=True, rstPin=36, intPin=29, csPin=24, debug=False)
+radio.initialize(rfm69.RF69_915MHZ, NODEID, NETWORKID)
+radio.setPowerLevel(50)
+radio._receiveBegin()
+while True:
+    #check for any received packets
+    if radio._RECEIVE_DONE:
+        msg = radio.DATA
+        sender = radio.SENDERID
+        msg_len=radio.DATALEN
+        try:
+            msg = json.loads("".join(map(chr,msg)))
+            measure = msg['measure']
+            value = msg['value']
+            mqtt_payload['measure'] = measure
+            mqtt_payload['value'] = value
+            mqtt_msg = json.dumps(mqtt_payload)
+            mqtt_client.publish(topic='home/sensor'+str(sender)+'/'+measure,payload=mqtt_msg)
+            print(sender, msg)
+        except ValueError as e:
+            print('corrupt json',e,msg)
+            pass
+        except KeyError as e:
+            #print("missing key: ", e)
+            pass
+        except OSError as e:
+            #print('error handling radio msg', e, msg)
+            pass
+        radio._receiveBegin()
+
                                 
