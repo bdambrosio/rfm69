@@ -4,7 +4,10 @@ Why RFM69 in these days of LORA? RFM69 modules are cheaper, more than good enoug
 
 mpy dir contains micropython code. WCalvert python code converted to micropython 1.15.
 
-py dir contains a couple of client python3 scripts plus an updated version of WCalvert python code (https://github.com/wcalvert/rfm69-python). py 'radios' dir contains WCalvert code converted to Python3 for the RPi.
+py dir contains a couple of client python3 scripts plus an updated version of WCalvert python code (https://github.com/wcalvert/rfm69-python). py 'radios' dir contains WCalvert code converted to Python3 for the RPi. mqtt_broker is a script that will forward rfm69 msgs to an mqtt broker. TBD to update this to follow Tasmota topic conventions (e.g., top-level topic should probably be 'tele')
+
+**Caveat** 
+Code is still a work in progress. Have only tested mpy -> send to py w ACK. haven't tried send from py yet, probably buggy. Also, Haven't worried about collisions or dropped transmissions, my use-model assumes a few dropped msgs don't matter (eg, remote weather sensors).
 
 **Notes:**
 1. No support for 'packet' objects. Probably easy to add, but smaller as is. Note this means you need to grab data on micropython side quickly, see 'echo.py' as an example
@@ -19,6 +22,8 @@ py dir contains a couple of client python3 scripts plus an updated version of WC
   
 6. This library uses interrputs, need to define reset, cs, and interrupt pins on both sides
 
-8. Thanks to both WCalvert and Kitterly for the starting points. Mostly this is a port of WClavert's python clone of Felix Rusu's RFM69 library. I'm not an open-source guru, apologies to anyone if I've violated any protocols about using their code, let me know and I'll fix.
+7. Thanks to both WCalvert and Kitterly for the starting points. Mostly this is a port of WClavert's python clone of Felix Rusu's RFM69 library. I'm not an open-source guru, apologies to anyone if I've violated any protocols about using their code, let me know and I'll fix.
+
+8. This all works w my 'Home' code (RPi 4-based, mostly) to insert into InfluxDB, display w Grafana, etc etc)
   
  
