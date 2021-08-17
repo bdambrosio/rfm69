@@ -9,7 +9,9 @@ import utime as time
 import ujson as json
 import gc
 import dht
-NODEID      = 4    #unique for each node on same network
+import pins
+
+NODEID      = pins.NODEID    #unique for each node on same network
 PARTNERID   = 1
 NETWORKID   = 61  #the same on all nodes that talk to each other
 
@@ -19,12 +21,12 @@ ACK_TIME    = 30 # max # of ms to wait for an ack
 RETRIES     = 2
 IS_RFM69HW      = True
 
-dht22=dht.DHT22(Pin('B7'))
+dht22=dht.DHT22(Pin(pins.am2302))
 #dht22=am2320.AM2320(I2C(1))
 #print("sensor initialized")
 
 msg_id=0
-radio = rfm69.RFM69(isRFM69HW=True, spiBus=2, csPin='B12', intPin='B4', rstPin='B3', debug=False)
+radio = rfm69.RFM69(isRFM69HW=True, spiBus=pins.rfm69SpiBus, csPin=pins.rfm69NSS, intPin=pins.rfm69D0, rstPin=pins.rfm69RST, debug=False)
 radio.initialize(FREQUENCY,NODEID,NETWORKID)
 
 print("radio initialized")
@@ -36,13 +38,14 @@ time_of_last_xmit = 0
 #except:
 #    pass
 
+
 def report(wakeup):
-    dht22=dht.DHT22(Pin('B7'))
+    dht22=dht.DHT22(Pin(pins.am2302))
     #dht22=am2320.AM2320(I2C(1))
     #print("sensor initialized")
 
     msg_id=0
-    radio = rfm69.RFM69(isRFM69HW=True, spiBus=2, csPin='B12', intPin='B4', rstPin='B3', debug=False)
+radio = rfm69.RFM69(isRFM69HW=True, spiBus=pins.rfm69SpiBus, csPin=pins.rfm69NSS, intPin=pins.rfm69D0, rstPin=pins.rfm69RST, debug=False)
     radio.initialize(FREQUENCY,NODEID,NETWORKID)
     print("radio initialized")
     time.sleep(1)
@@ -90,3 +93,4 @@ def report(wakeup):
     machine.deepsleep(360000)
  
 RTC().wakeup(120000, report)
+
