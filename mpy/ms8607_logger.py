@@ -43,7 +43,7 @@ flash() # bme initialized
 
 time.sleep(2)
 msg_id=0
-radio = rfm69.RFM69(isRFM69HW=True, csPin=3, intPin=2, rstPin=5, debug=True)
+radio = rfm69.RFM69(isRFM69HW=True, csPin=3, intPin=2, rstPin=5, debug=False)
 radio.initialize(FREQUENCY,NODEID,NETWORKID)
 
 print("radio initialized")
@@ -82,8 +82,7 @@ def report():
         time_of_last_xmit = int(time.time())
         for i in range(3):
             data = json.dumps(payload[i])
-            #print("")
-            print("Sending: {} ".format( data))
+            #print("Sending: {} ".format( data))
             ack = False
             radio.send(PARTNERID, data, len(data), True)
             if radio.ACKReceived(PARTNERID):
@@ -96,7 +95,7 @@ def report():
                     else:
                         time.sleep(.01)
             print("  ack: ", ack)
-            time.sleep(.05) #between packets of a measurement
+            time.sleep(.1) #between packets of a measurement
         flash() # data sent
     except Exception as e: #attempt to fetch and report measurements failed
         print(str(e))
@@ -111,6 +110,6 @@ def report():
 def main():
     while True:
         report()
-        time.sleep(6)
+        time.sleep(10)
     
 main()
