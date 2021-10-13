@@ -123,13 +123,7 @@ class RFM69(BaseRadio):
         self._unselect()
         return result
     
-    def _writeReg(self, addr, value):
-        self._select()
-        self._spi.writebytes([addr | 0x80, value])
-
-        self._unselect()
-        
-        # Select the transceiver
+    # Select the transceiver
     def _select(self):
         GPIO.output(self._csPin, 0)
         pass
@@ -233,7 +227,7 @@ class RFM69(BaseRadio):
         irqFlags1 = self._readReg(REG_IRQFLAGS1)
         irqFlags2 = self._readReg(REG_IRQFLAGS2)
         if self._debug:
-            print("irq entry ", self._mode, irqFlags1, irqFlags2, RF_IRQFLAGS2_PAYLOADREADY)
+            print("irq entry ", self._mode, irqFlags1, irqFlags2, irqFlags2 &RF_IRQFLAGS2_PAYLOADREADY!=0)
         if self._mode == RF69_MODE_TX and (irqFlags2 & RF_IRQFLAGS2_PACKETSENT !=0):
             self._packetSentIrq = True # let _sendFrame know transmit is done
             self._irq=False
